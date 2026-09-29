@@ -2,7 +2,7 @@ import json
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any
 
 
 @dataclass
@@ -24,7 +24,7 @@ class EventDTO:
         chat_id: int,
         handler: str,
         update_type: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
     ) -> "EventDTO":
         return cls(
             ts=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
@@ -34,10 +34,10 @@ class EventDTO:
             chat_id=chat_id,
             handler=handler,
             update_type=update_type,
-            payload=json.dumps(payload, ensure_ascii=False),
+            payload=json.dumps(payload, ensure_ascii=False, allow_nan=False),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -71,8 +71,9 @@ class TrafficDTO:
             referrer=referrer,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
 
 @dataclass
 class PurchaseDTO:
@@ -104,7 +105,7 @@ class PurchaseDTO:
             payment_provider=payment_provider,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ts": self.ts,
             "project_token": self.project_token,
@@ -114,6 +115,7 @@ class PurchaseDTO:
             "product_id": self.product_id,
             "payment_provider": self.payment_provider,
         }
+
 
 @dataclass
 class ErrorDTO:
@@ -142,5 +144,5 @@ class ErrorDTO:
             stack=stack,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
