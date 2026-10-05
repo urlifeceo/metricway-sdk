@@ -32,8 +32,8 @@ dev = ["build>=1.2", "pytest>=8", "pytest-asyncio>=0.23", "pytest-cov>=5", "ruff
 
 [project.urls]
 Homepage = "https://metricway.tech"
-Source = "https://github.com/urlifeceo/tgmetricks-sdk"
-Issues = "https://github.com/urlifeceo/tgmetricks-sdk/issues"
+Source = "https://github.com/urlifeceo/metricway-sdk"
+Issues = "https://github.com/urlifeceo/metricway-sdk/issues"
 
 [tool.setuptools.packages.find]
 include = ["metricway*"]
