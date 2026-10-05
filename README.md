@@ -1,6 +1,11 @@
-# metricway-sdk
+# MetricWay Python SDK
 
-Асинхронный SDK для отправки событий Telegram-бота в [metricway](https://metricway.tech). Поддерживает ручную отправку и автоматический сбор из aiogram 3.
+[![CI](https://github.com/urlifeceo/metricway-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/urlifeceo/metricway-sdk/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/metricway-sdk.svg)](https://pypi.org/project/metricway-sdk/)
+[![Python](https://img.shields.io/pypi/pyversions/metricway-sdk.svg)](https://pypi.org/project/metricway-sdk/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+Асинхронный Python SDK для отправки продуктовых событий Telegram-бота в [MetricWay](https://metricway.tech). Поддерживает ручную отправку и автоматический сбор из aiogram 3, не блокируя обработчики сетевыми запросами.
 
 ## Установка и быстрый старт
 
@@ -58,6 +63,28 @@ if __name__ == "__main__":
 
 `setup_aiogram_metrics` подключают один раз к роутеру. Он учитывает все входящие сообщения и callback-запросы, даже без подходящего обработчика. В таком случае имя обработчика — `unknown`. Для ручной отправки без aiogram установите `metricway-sdk` без дополнения.
 
+
+## Как устроено
+
+```mermaid
+flowchart LR
+    Bot[Telegram bot] --> SDK[MetricWay SDK]
+    SDK --> Queue[Bounded in-memory queue]
+    Queue --> Batch[Batching + retry worker]
+    Batch --> Collector[MetricWay collector]
+```
+
+Клиент разделяет сбор событий и сетевую доставку: публичные методы `track_*` только валидируют данные и кладут запись в ограниченную очередь, а отдельная asyncio-задача формирует батчи и отправляет их в collector.
+
+Ключевые решения:
+
+- **неблокирующая запись событий** — обработчик бота не ждёт HTTP-запрос;
+- **ограниченная очередь** — контролирует потребление памяти и задаёт понятное поведение при перегрузке;
+- **батчинг** — до 500 записей и не более 1 МиБ JSON на запрос;
+- **retry policy** — повторяются сетевые ошибки, HTTP 429 и 5xx, учитывается `Retry-After`;
+- **graceful shutdown** — `close()` пытается доставить накопленные события в пределах заданного timeout;
+- **опциональная интеграция aiogram** — базовый пакет не требует aiogram.
+
 ## Ручная отправка
 
 Методы `track_*` синхронные: они добавляют запись в очередь, не ожидая сеть.
@@ -111,5 +138,10 @@ metrics.track_purchase(
 2. Проверьте доступность `https://metricway.tech/collector/` с сервера бота.
 3. Посмотрите логи `metricway`: 401 — токен, 429 — ограничение частоты, 413 — размер запроса.
 4. Отправьте `/start test_campaign` и проверьте событие и источник трафика в кабинете.
+
+
+## Качество и CI
+
+GitHub Actions проверяет Python 3.10–3.14, Ruff, pytest с coverage threshold 85%, сборку wheel/sdist и `twine check`. Отдельный release workflow публикует пакет в PyPI по version tag через Trusted Publishing.
 
 Разработка описана в [CONTRIBUTING.md](CONTRIBUTING.md). Лицензия — MIT.
