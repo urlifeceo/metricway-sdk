@@ -68,9 +68,9 @@ if __name__ == "__main__":
 
 ```mermaid
 flowchart LR
-    Bot[Telegram bot] --> SDK[MetricWay SDK]
-    SDK --> Queue[Bounded in-memory queue]
-    Queue --> Batch[Batching + retry worker]
+    Bot[Telegram-бот] --> SDK[MetricWay SDK]
+    SDK --> Queue[Ограниченная очередь в памяти]
+    Queue --> Batch[Батчинг + worker повторов]
     Batch --> Collector[MetricWay collector]
 ```
 
@@ -81,8 +81,8 @@ flowchart LR
 - **неблокирующая запись событий** — обработчик бота не ждёт HTTP-запрос;
 - **ограниченная очередь** — контролирует потребление памяти и задаёт понятное поведение при перегрузке;
 - **батчинг** — до 500 записей и не более 1 МиБ JSON на запрос;
-- **retry policy** — повторяются сетевые ошибки, HTTP 429 и 5xx, учитывается `Retry-After`;
-- **graceful shutdown** — `close()` пытается доставить накопленные события в пределах заданного timeout;
+- **политика повторов** — повторяются сетевые ошибки, HTTP 429 и 5xx, учитывается `Retry-After`;
+- **корректное завершение** — `close()` пытается доставить накопленные события в пределах заданного таймаута;
 - **опциональная интеграция aiogram** — базовый пакет не требует aiogram.
 
 ## Ручная отправка
