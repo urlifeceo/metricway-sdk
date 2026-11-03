@@ -94,7 +94,8 @@ metrics.track_purchase(
 | --- | --- |
 | Сообщение | ID пользователя и чата, имя обработчика, тип обновления, полный текст |
 | Callback | ID пользователя и чата, имя обработчика, тип обновления, callback data |
-| `/start <payload>` | Дополнительная запись трафика со start payload |
+| `/start` в личном чате | Внутренний запуск без метки |
+| `/start <payload>` в личном чате | Запуск с меткой; источник автоматически равен payload |
 | Ошибка обработчика | Тип, сообщение и полный стек; исключение продолжает распространяться |
 
 **Текст, callback data и стек могут содержать личные данные и секреты.** Проверьте правила обработки данных своего бота перед подключением. Не передавайте пароли, платёжные реквизиты и другие секреты в payload или текстах ошибок. Храните токен проекта только на сервере; SDK передаёт его в заголовке `X-Project-Token` и поле записи, но не печатает в своих логах.
@@ -113,3 +114,46 @@ metrics.track_purchase(
 4. Отправьте `/start test_campaign` и проверьте событие и источник трафика в кабинете.
 
 Разработка описана в [CONTRIBUTING.md](CONTRIBUTING.md). Лицензия — MIT.
+
+
+## Трафик v2 (0.2.0)
+
+Перед обновлением SDK примените секцию Traffic v2 из `init-db.sql` и обновите collector.
+Новый SDK отправляет автоматические запуски в `/collector/track/traffic/v2`; 404/422 означает
+несовместимый collector. Пакет 0.2.0 подготовлен к выпуску; публикация выполняется отдельно.
+
+`/start` без аргумента — внутренний заход. `/start partner_a` — источник `partner_a`.
+Повторный запуск сохраняется отдельно, первый известный источник пользователя не меняется.
+Открытие чата, сообщение и callback не являются запуском. Учитываются только личные чаты людей.
+ID запуска стабилен по bot ID, chat ID и message ID; HTTP retry и повторная обработка сообщения
+не создают новый логический запуск. Разные сообщения с одинаковой меткой остаются разными запусками.
+
+Для собственных бизнес-меток передайте клиенту `traffic_resolver`:
+
+```python
+from metricway import MetricsClient, TrafficSource
+
+
+def resolve_traffic(payload):
+    if payload.startswith("ref_"):
+        return TrafficSource(source="referral")
+    if payload.startswith("invoice_"):
+        return TrafficSource(purpose="service")
+    return None  # источник по самой метке
+
+
+metrics = MetricsClient(
+    api_url="https://metricway.tech", project_token=project_token, traffic_resolver=resolve_traffic
+)
+```
+
+Не создавайте рекламный источник из каждого номера заказа или user ID: используйте resolver.
+Ошибки resolver сохраняют запуск с неизвестным источником и не прерывают обработчик бота.
+Не вызывайте `track_traffic` вручную одновременно с автоматическим middleware для одного запуска.
+
+Старый ручной `track_traffic(user_id, start_payload, utm_source, utm_campaign, referrer)`
+сохранён как legacy. Для ручной v2-интеграции добавьте keyword-only аргументы `bot_id`, `chat_id`,
+`message_id`, `occurred_at` (timezone-aware datetime), при необходимости `event_id`.
+Без полного контекста нельзя гарантировать дедупликацию повторной обработки Telegram-сообщения.
+
+При обновлении удалите старый обходной подкласс SourceMetricsClient: источник теперь определяется автоматически. Пользовательские переопределения track_traffic должны принимать новые keyword-only параметры контекста.

@@ -57,7 +57,7 @@ async def test_handled_and_unhandled_messages():
         "unknown",
     ]
     assert [event["update_type"] for event in recorder.events] == ["message", "message"]
-    assert recorder.traffic == [{"user_id": 123, "start_payload": "campaign"}]
+    assert [record["start_payload"] for record in recorder.traffic] == ["campaign"]
     assert recorder.events[0]["payload"]["text"] == "/start campaign"
 
 
@@ -81,7 +81,7 @@ async def test_callback_query_without_handler():
 
     assert recorder.events[0]["handler"] == "unknown"
     assert recorder.events[0]["chat_id"] == 456
-    assert recorder.events[0]["payload"] == {"callback_data": "pressed"}
+    assert recorder.events[0]["payload"]["callback_data"] == "pressed"
 
 
 @pytest.mark.asyncio
@@ -110,5 +110,14 @@ async def test_start_command_detection():
 
     await middleware(handler, message("/startup campaign"), {})
     await middleware(handler, message("   "), {})
-    await middleware(handler, message("/start@ExampleBot campaign"), {})
-    assert recorder.traffic == [{"user_id": 123, "start_payload": "campaign"}]
+    from unittest.mock import AsyncMock
+
+    bot = Bot("123:ABC")
+    bot.me = AsyncMock(
+        return_value=User(id=123, is_bot=True, first_name="Bot", username="ExampleBot")
+    )
+    try:
+        await middleware(handler, message("/start@ExampleBot campaign"), {"bot": bot})
+    finally:
+        await bot.session.close()
+    assert [record["start_payload"] for record in recorder.traffic] == ["campaign"]

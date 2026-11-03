@@ -1,6 +1,7 @@
 from metricway.client import MetricsClient
+from metricway.traffic import TrafficSource
 
-__all__ = ["MetricsClient", "AiogramMetricsMiddleware", "setup_aiogram_metrics"]
+__all__ = ["TrafficSource", "MetricsClient", "AiogramMetricsMiddleware", "setup_aiogram_metrics"]
 
 
 def __getattr__(name: str):

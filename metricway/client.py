@@ -12,11 +12,12 @@ from typing import Any
 import aiohttp
 
 from metricway.models import ErrorDTO, EventDTO, PurchaseDTO, TrafficDTO
+from metricway.traffic import TrafficResolver, traffic_record
 
 logger = logging.getLogger("metricway")
 MAX_BATCH_SIZE = 500
 MAX_REQUEST_BYTES = 1024 * 1024
-TABLES = ("events", "traffic", "errors", "purchases")
+TABLES = ("events", "traffic", "traffic/v2", "errors", "purchases")
 Record = tuple[str, dict[str, Any]]
 
 
@@ -32,6 +33,7 @@ class MetricsClient:
         max_queue_size: int = 10_000,
         max_retries: int = 5,
         shutdown_timeout: float = 10.0,
+        traffic_resolver: TrafficResolver | None = None,
     ) -> None:
         if not api_url or not api_url.startswith(("https://", "http://")):
             raise ValueError("api_url must be an HTTP(S) URL")
@@ -46,6 +48,7 @@ class MetricsClient:
         if shutdown_timeout <= 0:
             raise ValueError("shutdown_timeout must be positive")
 
+        self.traffic_resolver = traffic_resolver
         self.url = api_url.rstrip("/")
         self.project_token = project_token
         self.batch_size = batch_size
@@ -119,7 +122,30 @@ class MetricsClient:
         utm_source: str = "",
         utm_campaign: str = "",
         referrer: str = "",
+        *,
+        bot_id: int | None = None,
+        chat_id: int | None = None,
+        message_id: int | None = None,
+        occurred_at: datetime | None = None,
+        event_id: str | None = None,
     ) -> None:
+        if any(value is not None for value in (bot_id, chat_id, message_id, occurred_at, event_id)):
+            if bot_id is None or chat_id is None or message_id is None or occurred_at is None:
+                raise ValueError("Traffic v2 requires the complete Telegram message context")
+            record = traffic_record(
+                user_id,
+                start_payload,
+                utm_source,
+                utm_campaign,
+                bot_id=bot_id,
+                chat_id=chat_id,
+                message_id=message_id,
+                occurred_at=occurred_at,
+                event_id=event_id,
+                resolver=self.traffic_resolver,
+            )
+            self._enqueue("traffic/v2", record)
+            return
         dto = TrafficDTO.create(
             self.project_token, user_id, start_payload, utm_source, utm_campaign, referrer
         )
