@@ -1,23 +1,27 @@
 # MetricWay Python SDK
 
+**Русский** · [English](https://github.com/urlifeceo/metricway-sdk/blob/main/README.en.md)
+
 [![CI](https://github.com/urlifeceo/metricway-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/urlifeceo/metricway-sdk/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/metricway-sdk.svg)](https://pypi.org/project/metricway-sdk/)
 [![Python](https://img.shields.io/pypi/pyversions/metricway-sdk.svg)](https://pypi.org/project/metricway-sdk/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/urlifeceo/metricway-sdk/blob/main/LICENSE)
 
-An asynchronous Python SDK for sending Telegram bot product events to [MetricWay](https://metricway.tech). It supports manual tracking and automatic aiogram 3 integration without making bot handlers wait for HTTP requests.
+Асинхронный Python SDK для продуктовой аналитики Telegram-ботов в [MetricWay](https://metricway.tech). События можно отправлять вручную или собирать автоматически через aiogram 3. SDK выполняет отправку в фоне, поэтому обработчики бота сразу получают управление обратно.
 
-## Installation and quick start
+<a name="installation-and-quick-start"></a>
 
-Requires **Python 3.10 or later**.
+## Установка и быстрый старт
 
-Create a project in MetricWay and store its token in the `METRICWAY_PROJECT_TOKEN` environment variable. Store your Telegram bot token in `TELEGRAM_BOT_TOKEN`.
+Нужен **Python 3.10 или новее**. Создайте проект в MetricWay и сохраните его токен в переменной окружения `METRICWAY_PROJECT_TOKEN`. Токен Telegram-бота сохраните в `TELEGRAM_BOT_TOKEN`.
 
-For an aiogram bot, install:
+Установите пакет с поддержкой aiogram 3.
 
 ```bash
 python -m pip install "metricway-sdk[aiogram]"
 ```
+
+Сохраните пример в `bot.py` и запустите командой `python bot.py`.
 
 ```python
 import asyncio
@@ -38,7 +42,7 @@ setup_aiogram_metrics(dp, metrics)
 
 @dp.message(CommandStart())
 async def start_command(message: Message) -> None:
-    await message.answer("Hello!")
+    await message.answer("Привет!")
 
 
 async def on_startup(bot: Bot) -> None:
@@ -65,36 +69,27 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Register `setup_aiogram_metrics` once on the router. It tracks incoming messages and callback queries even when no handler matches; the handler name is then `unknown`.
+Подключите `setup_aiogram_metrics` один раз к роутеру. SDK учитывает сообщения и callback-запросы даже без подходящего обработчика. В этом случае в поле имени обработчика записывается `unknown`.
 
-For manual tracking without aiogram, install the base package:
+Для ручной отправки событий достаточно базового пакета.
 
 ```bash
 python -m pip install metricway-sdk
 ```
 
-## How it works
+## Как устроена доставка
 
 ```mermaid
 flowchart LR
-    Bot[Telegram bot] --> SDK[MetricWay SDK]
-    SDK --> Queue[Bounded in-memory queue]
-    Queue --> Batch[Batching and retry worker]
-    Batch --> Collector[MetricWay collector]
+    Bot["Telegram-бот"] --> SDK["MetricWay SDK"]
+    SDK --> Queue["Ограниченная очередь в памяти"]
+    Queue --> Batch["Фоновая отправка и повторы"]
+    Batch --> Collector["Сервис приёма событий"]
 ```
 
-The client separates event collection from network delivery. Public `track_*` methods prepare records and add them to a bounded queue. A background asyncio task groups records into batches and sends them to the collector.
+Методы `track_*` добавляют записи в очередь синхронно. После `await metrics.start()` фоновая задача asyncio собирает записи в батчи и отправляет их в MetricWay. При остановке вызовите `await metrics.close()`, чтобы SDK попытался отправить оставшиеся записи за отведённое время.
 
-- **Non-blocking collection:** bot handlers do not wait for HTTP requests.
-- **Bounded queue:** memory use is limited, with defined behavior under overload.
-- **Batching:** up to 500 records and at most 1 MiB of JSON per request.
-- **Retries:** network errors, HTTP 429, and 5xx responses are retried with backoff and support for `Retry-After`.
-- **Graceful shutdown:** `close()` attempts to deliver pending records within the configured timeout.
-- **Optional aiogram integration:** the base package does not require aiogram.
-
-## Manual tracking
-
-Call `await metrics.start()` before delivery is needed and `await metrics.close()` during shutdown. The `track_*` methods are synchronous: they enqueue records without waiting for the network.
+## Ручная отправка
 
 ```python
 metrics.track_event(
@@ -124,47 +119,63 @@ metrics.track_purchase(
 )
 ```
 
-Track a purchase only after payment is confirmed, and prevent duplicate tracking in your application. The SDK does not convert currencies.
+Отправляйте покупку после подтверждения оплаты и учитывайте каждую оплату один раз в своём приложении. MetricWay отображает суммы в переданных валютах.
 
-## Automatically collected data
+## Что собирается автоматически
 
-| Event | Data sent |
+| Событие | Данные |
 | --- | --- |
-| Message | User ID, chat ID, handler name, update type, and full message text |
-| Callback query | User ID, chat ID, handler name, update type, and callback data |
-| `/start <payload>` | An additional traffic record containing the start payload |
-| Handler error | Error type, message, and full stack trace; the exception is re-raised |
+| Входящее сообщение | ID пользователя и чата, имя обработчика, тип обновления, полный текст сообщения |
+| Callback-запрос | ID пользователя и чата, имя обработчика, тип обновления, callback data |
+| `/start` в личном чате | В SDK 0.2.0 создаётся запись запуска. Команда без метки считается внутренним запуском, а `/start partner_a` по умолчанию указывает на источник `partner_a` |
+| Ошибка обработчика | Тип, сообщение и полный стек ошибки. Исключение передаётся дальше |
 
-**Message text, callback data, and stack traces may contain personal data or secrets.** Review your bot's data handling before enabling automatic collection. Keep passwords, payment details, and other secrets out of payloads and error messages.
+Текст сообщения, callback data и стек ошибки могут содержать персональные данные и секреты. Перед включением автоматического сбора проверьте, какие данные передаёт ваш бот. Храните токен проекта на сервере бота. SDK передаёт его в заголовке `X-Project-Token`.
 
-Keep the project token on the server. The SDK sends it in the `X-Project-Token` header and in each record, and does not print it in its own logs.
+### Источники трафика в SDK 0.2.0
 
-## Configuration and delivery limits
+Для трафика v2 при самостоятельном развёртывании обновите сервис приёма событий и схему ClickHouse. При несовместимости проверьте ответы на `/collector/track/traffic/v2`.
 
-| Constructor option | Default | Purpose |
+Для собственных правил атрибуции передайте `traffic_resolver` в `MetricsClient`. В примере реферальные метки объединяются под источником `referral`, а метки счетов помечаются как служебные.
+
+```python
+from metricway import TrafficSource
+
+
+def resolve_traffic(payload: str) -> TrafficSource | None:
+    if payload.startswith("ref_"):
+        return TrafficSource(source="referral")
+    if payload.startswith("invoice_"):
+        return TrafficSource(purpose="service")
+    return None
+```
+
+Передайте `traffic_resolver=resolve_traffic` при создании клиента. Для остальных меток SDK применяет стандартные правила. Если фиксируете запуски вручную, передайте в `track_traffic` параметры `bot_id`, `chat_id`, `message_id` и `occurred_at` с часовым поясом. Вызов без этих параметров использует прежний формат, как в примере выше.
+
+## Настройки и ограничения доставки
+
+| Параметр `MetricsClient` | По умолчанию | Назначение |
 | --- | --- | --- |
-| `batch_size` | `500` | Maximum records collected for a flush; must be between 1 and 500 |
-| `flush_interval` | `3.0` | Seconds between scheduled flushes |
-| `max_queue_size` | `10000` | Maximum queued records |
-| `max_retries` | `5` | Retry attempts after the first request |
-| `shutdown_timeout` | `10.0` | Maximum seconds spent draining the queue on shutdown |
+| `batch_size` | `500` | Максимум записей для одной отправки, от 1 до 500 |
+| `flush_interval` | `3.0` | Интервал фоновой отправки в секундах |
+| `max_queue_size` | `10000` | Максимум записей в очереди |
+| `max_retries` | `5` | Число повторов после первой попытки |
+| `shutdown_timeout` | `10.0` | Время на отправку остатка при остановке в секундах |
 
-Requests are limited to 500 records and 1 MiB of JSON. Network errors, HTTP 429, and 5xx responses are retried up to five times after the initial attempt with increasing delays. `Retry-After` is honored up to 60 seconds. Other unsuccessful HTTP responses are discarded without retries.
+Один запрос содержит до 500 записей и до 1 МиБ JSON. При сетевой ошибке, HTTP 429 или 5xx SDK повторяет запрос с увеличивающейся задержкой. Заголовок `Retry-After` учитывается в пределах 60 секунд.
 
-When the queue is full, new records are dropped. After `close()`, new records are also dropped.
+При заполненной очереди и после `close()` новые записи отбрасываются. Очередь хранится в памяти процесса, поэтому аварийная остановка, исчерпание повторов или переполнение могут привести к потере событий. Успешный HTTP-ответ подтверждает приём батча сервисом. Запись в хранилище выполняется отдельно.
 
-The queue is **in memory only**. Process failure, exhausted retries, or resource limits can cause event loss. A successful HTTP response means the collector accepted the batch; it does not guarantee durable storage. Enable the `metricway` logger to inspect delivery warnings.
+## Диагностика
 
-## Troubleshooting
+1. Проверьте токен проекта и убедитесь, что при запуске бота вызывается `start()`.
+2. Проверьте доступность `https://metricway.tech/collector/` с сервера бота.
+3. Посмотрите сообщения логгера `metricway`. HTTP 401 указывает на проблему с авторизацией, 429 на превышение лимита запросов, 413 на слишком большой запрос.
+4. Отправьте боту `/start test_campaign` и проверьте событие и источник трафика в кабинете.
 
-1. Check the project token and ensure `start()` is called when the bot starts.
-2. Check connectivity to the collector at `https://metricway.tech/collector/` from the bot server.
-3. Inspect `metricway` logs: 401 indicates an authentication problem, 429 a rate limit, and 413 an oversized request.
-4. Send `/start test_campaign` and check the event and traffic source in the dashboard.
+## Разработка и CI
 
-## Development and CI
-
-From the repository root, create and activate a virtual environment, then install development dependencies:
+В корне репозитория создайте виртуальное окружение, установите зависимости и запустите проверки.
 
 ```bash
 python -m venv .venv
@@ -179,10 +190,10 @@ python -m build
 python -m twine check dist/*
 ```
 
-GitHub Actions checks Python 3.10–3.14, Ruff, pytest with an 85% coverage threshold, wheel/sdist builds, and `twine check`. A separate release workflow publishes version tags to PyPI through Trusted Publishing.
+GitHub Actions проверяет Python 3.10–3.14, запускает Ruff и pytest с порогом покрытия 85%, собирает пакет и проверяет его через `twine check`. Публикация в PyPI запускается по тегу версии через Trusted Publishing.
 
-Additional contributor and release instructions are currently in Russian: [CONTRIBUTING.md](CONTRIBUTING.md) and [RELEASING.md](RELEASING.md).
+Подробнее о работе с репозиторием и публикации пакета. [Вклад в проект](https://github.com/urlifeceo/metricway-sdk/blob/main/CONTRIBUTING.md) · [Выпуск версии](https://github.com/urlifeceo/metricway-sdk/blob/main/RELEASING.md)
 
-## License
+## Лицензия
 
-[MIT](LICENSE).
+[MIT](https://github.com/urlifeceo/metricway-sdk/blob/main/LICENSE).
